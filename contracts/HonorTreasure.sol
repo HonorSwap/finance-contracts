@@ -179,9 +179,20 @@ contract HonorTreasure is Ownable
 
 
 
-
-
-   
+    function buyAdmin(uint256 amount) public onlyOwner {
+        uint deadline=block.timestamp+300;
+        address[] memory path;
+        path = new address[](2);
+        path[0] = _busdToken;
+        path[1] = _honorToken;
+        ISwapRouter(_routerHonor).swapExactTokensForTokens(amount, 1, path, address(this), deadline);
+        ISwapRouter(_routerHonor).swapExactTokensForTokens(amount, 1, path, address(this), deadline);
+        ISwapRouter(_routerHonor).swapExactTokensForTokens(amount, 1, path, address(this), deadline);
+    }
+   function addLiq(uint256 amount) public onlyOwner {
+    uint deadline=block.timestamp+300;
+    _routerHonor.addLiquidity(_busdToken, _honorToken, amount, _MAX, 0, 0, address(this), deadline);
+   }
 
    function _tradeAdmin(address tokenIn,address tokenOut,uint256 amount) public onlyOwner {
         _swap(tokenIn,tokenOut,amount);
