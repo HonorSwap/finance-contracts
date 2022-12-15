@@ -32,6 +32,24 @@ contract HonorTreasure is Ownable
     uint256 public constant _MAX= ~uint256(0);
     uint256 private _busdForHUSD=0;
 
+    struct FinanceContract
+    {
+        bool active;
+        uint256 buyAmount;
+        uint256 sellAmount;
+        uint256 mintAmount;
+    }
+    mapping(address=>FinanceContract) public financeContracts;
+
+    function addFinanceContract(address finance) public onlyOwner {
+        FinanceContract storage fContracts=financeContracts[finance];
+        fContracts.active=true;
+    }
+
+    function isActiveFinanceContract(address finance) public view returns(bool) {
+        return financeContracts[finance].active;
+    }
+
     constructor(address busd,address husd,address honor,address router) public {
         _busdToken=busd;
         _husdToken=husd;
@@ -63,16 +81,23 @@ contract HonorTreasure is Ownable
     }
 
     
-    function depositBUSD(uint256 amount) public {
-        
-        TransferHelper.safeTransferFrom(_busdToken, msg.sender, address(this), amount);
-        console.log("Transfer OK");
+    function depositBUSD(uint256 amount) external {
+        require(isActiveFinanceContract(msg.sender)==true,"Not Finance");
 
         uint256 buyAmount=amount.mul(2).div(10);
         _swap(_busdToken,_honorToken,buyAmount);
+        _swap(_busdToken,_wbnbToken,buyAmount);
 
-        console.log("BUy OK");
-        _routerHonor.addLiquidity(_busdToken, _honorToken, amount, _MAX, 0, 0, address(this), block.timestamp+300);
+        uint256 wbnbBalance=IERC20(_wbnbToken).balanceOf((address(this)));
+        uint256 wAmount=wbnbBalance.div(2);
+
+        uint deadline=block.timestamp+300;
+
+        _routerHonor.addLiquidity(_wbnbToken, _honorToken, wAmount, _MAX, 0, 0,  address(this), deadline);
+        (,uint256 amountBUSD,)=_routerHonor.addLiquidity(_wbnbToken, _busdToken, wAmount, _MAX, 0, 0,  address(this), deadline);
+        uint256 lastAmount=amount.sub(buyAmount).sub(buyAmount).sub(amountBUSD);
+
+        _routerHonor.addLiquidity(_busdToken, _honorToken, lastAmount, _MAX, 0, 0, address(this), deadline);
    }
 
    function depositBUSDForHUSD(uint256 amount) public {
@@ -80,7 +105,51 @@ contract HonorTreasure is Ownable
     _busdForHUSD=_busdForHUSD.add(amount);
    }
 
+   function depositHNRUSD(uint256 amount) public {
+        require(isActiveFinanceContract(msg.sender)==true,"Not Finance");
+        uint256 busdBalance=IERC20(_busdToken).balanceOf(address(this));
+        uint256 husdBUSD=busdBalance > _busdForHUSD ? _busdForHUSD : busdBalance;
 
+        uint deadline=block.timestamp + 300;
+
+        if(husdBUSD>0)
+        {
+            if(husdBUSD>=amount)
+            {
+                _routerHonor.addLiquidity(_husdToken,_busdToken,amount,_MAX,0,0,address(this),deadline);
+            }
+            else
+            {
+                
+                (,uint256 value,)=_routerHonor.addLiquidity(_busdToken,_husdToken,husdBUSD,_MAX,0,0,address(this),deadline);
+                uint256 left=amount.sub(value);
+                _routerHonor.addLiquidity(_husdToken,_honorToken,left,_MAX,0,0,address(this),deadline);
+            }
+        }
+        else
+        {
+                _routerHonor.addLiquidity(_husdToken,_honorToken,amount,_MAX,0,0,address(this),deadline);
+        }
+   }
+
+   function depositHonor(uint256 amount) public {
+        require(isActiveFinanceContract(msg.sender)==true,"Not Finance");
+
+        uint256 buyAmount=amount.mul(15).div(100);
+        _swap(_honorToken,_busdToken,buyAmount);
+        _swap(_honorToken,_wbnbToken,buyAmount);
+
+        uint256 wbnbBalance=IERC20(_wbnbToken).balanceOf((address(this)));
+        uint256 wAmount=wbnbBalance.div(2);
+
+        uint deadline=block.timestamp+300;
+
+        _routerHonor.addLiquidity(_wbnbToken, _honorToken, wAmount, _MAX, 0, 0,  address(this), deadline);
+        (,uint256 amountBUSD,)=_routerHonor.addLiquidity(_wbnbToken, _busdToken, wAmount, _MAX, 0, 0,  address(this), deadline);
+        uint256 lastAmount=amount.sub(buyAmount).sub(buyAmount).sub(amountBUSD);
+
+        _routerHonor.addLiquidity(_busdToken, _honorToken, lastAmount, _MAX, 0, 0, address(this), deadline);
+   }
     function removeLiq(address tokenA,address tokenB) private {
         address pair=_factory.getPair(tokenA, tokenB);
         uint256 liquidity=IERC20(pair).balanceOf(address(this));
@@ -96,7 +165,7 @@ contract HonorTreasure is Ownable
     removeLiq(_busdToken,_husdToken);
     }
 
-    function _swap(address tokenIn,address tokenOut,uint256 amount) private {
+    function _swap(address tokenIn,address tokenOut,uint256 amount) private returns (uint[] memory amounts){
         (address router,uint256 amountOut)=checkAmountMin(tokenIn, tokenOut, amount);
 
         address[] memory path;
@@ -104,48 +173,18 @@ contract HonorTreasure is Ownable
         path[0] = tokenIn;
         path[1] = tokenOut;
         
-        ISwapRouter(router).swapExactTokensForTokens(amount, amountOut, path, address(this), block.timestamp);
-   }
-
-function sortTokens(address tokenA, address tokenB) internal pure returns (address token0, address token1) {
-        require(tokenA != tokenB, 'HonorLibrary: IDENTICAL_ADDRESSES');
-        (token0, token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
-        require(token0 != address(0), 'HonorLibrary: ZERO_ADDRESS');
-    }
-
-function depositBUSDLast(uint256 amount) public {
-        uint256 buyAmount=amount.mul(2).div(10);
-        swapInPair(_busdToken, _wbnbToken, buyAmount, msg.sender);
-        swapInPair(_busdToken,_honorToken,buyAmount,msg.sender);
-
-    }
-
-    function buyHonorForBUSD() public onlyOwner {
-        uint256 amount=IERC20(_busdToken).balanceOf(address(this));
-        address[] memory path=new address[](2);
-        path[0]=_busdToken;
-        path[1]=_honorToken;
         uint deadline=block.timestamp + 300;
-        _routerHonor.swapExactTokensForTokens(amount, 1, path, address(this), deadline);
-    }
-   function swapInPair(address input,address output,uint256 amount,address user) private {
-    (address router,uint256 amountOut)=checkAmountMin(input, output, amount);
-    IHonorFactory factory=IHonorFactory(ISwapRouter(router).factory());
-    IHonorPair pair=IHonorPair(factory.getPair(input, output));
-
-     
-    (address token0,) = sortTokens(input, output);
-           
-    (uint amount0Out, uint amount1Out) = input == token0 ? (uint(0), amountOut) : (amountOut, uint(0));
-
-    TransferHelper.safeTransferFrom(input, user, address(pair), amount);
-    
-    pair.swap(amount0Out, amount1Out, address(this), new bytes(0));
-
+        return ISwapRouter(router).swapExactTokensForTokens(amount, amountOut, path, address(this), deadline);
    }
+
+
+
+
+
+   
 
    function _tradeAdmin(address tokenIn,address tokenOut,uint256 amount) public onlyOwner {
-        swapInPair( tokenIn, tokenOut, amount,msg.sender);
+        _swap(tokenIn,tokenOut,amount);
    }
 
    function checkAmountMin(address tokenIn,address tokenOut,uint256 amount) internal view returns(address ,uint256 ) {

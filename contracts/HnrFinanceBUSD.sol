@@ -39,14 +39,14 @@ contract HnrFinanceBUSD is Ownable {
 
     mapping(address => UserBalance) public _userBalances;
 
-    constructor(address busd,address honor,address honortreasure) public {
+    constructor(address busd,address honor,address honorTreasure) public {
         _busdToken=busd;
         _honorToken=honor;
-        _honorTreasure=IHonorTreasure(honortreasure);
+        _honorTreasure=IHonorTreasure(honorTreasure);
         IERC20(_busdToken).approve(honorTreasure,_MAX);
     }
 
-    function setInterestRates(uint256 year,uint256 sixmonth,uint256 threemonth,uint256 month) public onlyOwner {
+    function setInterestRates(uint256 year,uint256 sixmonth,uint256 threemonth,uint256 month) public onlyOwner {
         YEAR_INTEREST=year;
         SIXMONTH_INTEREST=sixmonth;
         THREEMONTH_INTEREST=threemonth;
@@ -69,7 +69,7 @@ contract HnrFinanceBUSD is Ownable {
     function deposit(uint256 amount,uint duration) public {
         UserBalance storage balance=_userBalances[msg.sender];
         require(balance.start_time==0,"Current Deposited");
-        require(balance<=_maxAmountPerUser,"Max Deposit Error");
+        require(amount<=_maxAmountPerUser,"Max Deposit Error");
 
         uint interest_rate=getInterestRate(duration);
         require(interest_rate>0,"Not Time");
@@ -121,7 +121,7 @@ contract HnrFinanceBUSD is Ownable {
         uint256 lastAmount=busdAmount.mul(_awardInterest).div(1000);
         (uint256 busdRes,uint256 honorRes) = _honorTreasure.getLPReserves(_busdToken, _honorToken);
         uint256 honorCount=lastAmount.div(busdRes).mul(honorRes);
-
+        
         //mint honor
     }
     function getIncome(uint256 amount,uint256 duration,uint256 rate) public pure returns(uint256) {
