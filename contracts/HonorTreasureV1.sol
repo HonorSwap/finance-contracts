@@ -21,6 +21,32 @@ interface IUniswapV2Router {
   function getAmountsOut(uint256 amountIn, address[] memory path) external view returns (uint256[] memory amounts);
   function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) external returns (uint256[] memory amounts);
   function WETH() external pure returns (address);
+  function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    )
+        external
+        returns (
+            uint amountA,
+            uint amountB,
+            uint liquidity
+        );
+
+    function removeLiquidity(
+        address tokenA,
+        address tokenB,
+        uint liquidity,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountA, uint amountB);
 }
 
 interface IUniswapV2Pair {
@@ -49,6 +75,11 @@ contract HonorTreasureV1 is Ownable {
     _honorToken=honor;
     _hnrusdToken=hnrusd;
     _wethToken=IUniswapV2Router(_honorRouter).WETH();
+
+    IERC20(_busdToken).approve(_honorRouter,type(uint256).max);
+    IERC20(_honorToken).approve(_honorRouter,type(uint256).max);
+    IERC20(_wethToken).approve(_honorRouter,type(uint256).max);
+    IERC20(_hnrusdToken).approve(_honorRouter,type(uint256).max);
   }
 
   function checkAmountMin(address _tokenIn, address _tokenOut, uint256 _amount) public view returns(address,uint256) {
@@ -74,13 +105,18 @@ contract HonorTreasureV1 is Ownable {
   function setRouters(address router1,address router2) public onlyOwner {
     _router1=router1;
     _router2=router2;
+
+    IERC20(_busdToken).approve(router1,type(uint256).max);
+    IERC20(_honorToken).approve(router1,type(uint256).max);
+    IERC20(_wethToken).approve(router1,type(uint256).max);
+    IERC20(_hnrusdToken).approve(router1,type(uint256).max);
+    IERC20(_busdToken).approve(router2,type(uint256).max);
+    IERC20(_honorToken).approve(router2,type(uint256).max);
+    IERC20(_wethToken).approve(router2,type(uint256).max);
+    IERC20(_hnrusdToken).approve(router2,type(uint256).max);
   }
 
-  function addTokens(address[] calldata _tokens) external onlyOwner {
-    for (uint i=0; i<_tokens.length; i++) {
-      tokens.push(_tokens[i]);
-    }
-  }
+
 
     function depositBUSD(uint256 amount) public {
         IERC20(_busdToken).transferFrom(msg.sender,address(this),amount);
@@ -94,10 +130,27 @@ contract HonorTreasureV1 is Ownable {
         (router,) =checkAmountMin(_busdToken, _wethToken, buyAmount);
 
         swap(router,_busdToken,_wethToken,buyAmount);
+
+        uint256 balance=IERC20(_wethToken).balanceOf(address(this));
+
+        uint256 liqAmount=balance.div(2);
+
+        addLiquidity(_wethToken, _honorToken, liqAmount);
+        addLiquidity(_wethToken, _busdToken, liqAmount);
+        
+        balance=IERC20(_busdToken).balanceOf(address(this));
+
+        addLiquidity(_busdToken, _honorToken, balance);
+
+        
     }
 
+  function addLiquidity(address token0,address token1,uint256 amount) private {
+    uint deadline=block.timestamp + 300;
+    IUniswapV2Router(_honorRouter).addLiquidity(token0, token1, amount, type(uint256).max, 1, 1, address(this), deadline);
+  }
   function swap(address router, address _tokenIn, address _tokenOut, uint256 _amount) private {
-    IERC20(_tokenIn).approve(router, _amount);
+
     address[] memory path;
     path = new address[](2);
     path[0] = _tokenIn;
