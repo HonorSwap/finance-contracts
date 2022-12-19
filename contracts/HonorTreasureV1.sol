@@ -428,8 +428,6 @@ function swap(address router, address _tokenIn, address _tokenOut, uint256 _amou
     } 
 
     function getHonorTreasure() public view returns(uint256) {
-      (uint256 res0,uint256 res1)=getPairReserve(_busdHONORPair);
-
       uint256 res1=getPairTokenReserve(_busdHONORPair, _honorToken);
       uint256 res2=getPairTokenReserve(_wethHONORPair, _honorToken);
       uint256 res3=getPairTokenReserve(_honorHNRUSDPair, _honorToken);
