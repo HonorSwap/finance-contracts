@@ -5,17 +5,9 @@ import "hardhat/console.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-interface IERC20 {
-  function totalSupply() external view returns (uint);
-  function balanceOf(address account) external view returns (uint);
-  function transfer(address recipient, uint amount) external returns (bool);
-  function allowance(address owner, address spender) external view returns (uint);
-  function approve(address spender, uint amount) external returns (bool);
-  function transferFrom(address sender, address recipient, uint amount) external returns (bool);
-  event Transfer(address indexed from, address indexed to, uint value);
-  event Approval(address indexed owner, address indexed spender, uint value);
-}
+
 
 interface IUniswapV2Router {
   function getAmountsOut(uint256 amountIn, address[] memory path) external view returns (uint256[] memory amounts);
@@ -69,6 +61,8 @@ contract HonorTreasureV1 is Ownable {
   address public _router1;
   address public _router2;
 
+  address public _hnrUSDController;
+
   constructor(address busd,address hnrusd,address honor,address honorRouter) public {
     _honorRouter=honorRouter;
     _busdToken=busd;
@@ -81,6 +75,11 @@ contract HonorTreasureV1 is Ownable {
     IERC20(_wethToken).approve(_honorRouter,type(uint256).max);
     IERC20(_hnrusdToken).approve(_honorRouter,type(uint256).max);
   }
+
+  function setHNRUSDController(address _controller) public onlyOwner {
+    _hnrUSDController=_controller;
+  }
+
 
   function checkAmountMin(address _tokenIn, address _tokenOut, uint256 _amount) public view returns(address,uint256) {
     uint256 ret0=getAmountOutMin(_honorRouter, _tokenIn, _tokenOut, _amount);
@@ -118,7 +117,7 @@ contract HonorTreasureV1 is Ownable {
 
 
 
-    function depositBUSD(uint256 amount) public {
+  function depositBUSD(uint256 amount) public {
         IERC20(_busdToken).transferFrom(msg.sender,address(this),amount);
 
         uint256 buyAmount=amount.div(5);
@@ -135,20 +134,80 @@ contract HonorTreasureV1 is Ownable {
 
         uint256 liqAmount=balance.div(2);
 
-        addLiquidity(_wethToken, _honorToken, liqAmount);
-        addLiquidity(_wethToken, _busdToken, liqAmount);
-        
+        uint deadline=block.timestamp + 300;
+
+        IUniswapV2Router(_honorRouter).addLiquidity(_wethToken, _honorToken, liqAmount, type(uint256).max, 1, 1, address(this), deadline);
+
+        liqAmount=IERC20(_wethToken).balanceOf(address(this));
+        IUniswapV2Router(_honorRouter).addLiquidity(_wethToken, _busdToken, liqAmount, type(uint256).max, 1, 1, address(this), deadline);
+
         balance=IERC20(_busdToken).balanceOf(address(this));
+        IUniswapV2Router(_honorRouter).addLiquidity(_busdToken, _honorToken, balance, type(uint256).max, 1, 1, address(this), deadline);
 
-        addLiquidity(_busdToken, _honorToken, balance);
-
-        
     }
 
+    function depositHNRUSD(uint256 amount) public {
+        IERC20(_hnrusdToken).transferFrom(msg.sender,address(this),amount);
+
+        uint256 balanceBUSD=IERC20(_busdToken).balanceOf(_hnrUSDController);
+
+        uint deadline=block.timestamp + 300;
+        if(amount<=balanceBUSD)
+        {
+          IERC20(_busdToken).transferFrom(_hnrUSDController, address(this), amount);
+          IUniswapV2Router(_honorRouter).addLiquidity(_hnrusdToken, _busdToken, amount, type(uint256).max, 1, 1, address(this), deadline);
+        }
+        else
+        {
+          if(balanceBUSD>0)
+          {
+            IERC20(_busdToken).transferFrom(_hnrUSDController, address(this), balanceBUSD);
+            IUniswapV2Router(_honorRouter).addLiquidity(_busdToken, _hnrusdToken, balanceBUSD, type(uint256).max, 1, 1, address(this), deadline);
+          }
+
+          balanceBUSD=IERC20(_hnrusdToken).balanceOf(address(this));
+
+          IUniswapV2Router(_honorRouter).addLiquidity(_hnrusdToken, _honorToken, balanceBUSD, type(uint256).max, 1, 1, address(this), deadline);
+
+        }
+    }
+
+    function depositWETH(uint256 amount) public {
+        
+        IERC20(_wethToken).transferFrom(msg.sender,address(this),amount);
+
+        uint256 buyAmount=amount.div(10);
+
+        (address router,)=checkAmountMin(_wethToken, _honorToken, buyAmount);
+
+        swap(router,_wethToken,_honorToken,buyAmount);
+
+        (router,) =checkAmountMin(_wethToken, _busdToken, buyAmount);
+
+        swap(router,_busdToken,_wethToken,buyAmount);
+
+        uint256 balance=IERC20(_wethToken).balanceOf(address(this));
+
+        uint256 liqAmount=balance.div(2);
+
+        uint deadline=block.timestamp + 300;
+
+        IUniswapV2Router(_honorRouter).addLiquidity(_wethToken, _honorToken, liqAmount, type(uint256).max, 1, 1, address(this), deadline);
+
+        liqAmount=IERC20(_wethToken).balanceOf(address(this));
+        IUniswapV2Router(_honorRouter).addLiquidity(_wethToken, _busdToken, liqAmount, type(uint256).max, 1, 1, address(this), deadline);
+
+        balance=IERC20(_busdToken).balanceOf(address(this));
+        IUniswapV2Router(_honorRouter).addLiquidity(_busdToken, _honorToken, balance, type(uint256).max, 1, 1, address(this), deadline);
+
+    }
+
+     
   function addLiquidity(address token0,address token1,uint256 amount) private {
     uint deadline=block.timestamp + 300;
     IUniswapV2Router(_honorRouter).addLiquidity(token0, token1, amount, type(uint256).max, 1, 1, address(this), deadline);
   }
+
   function swap(address router, address _tokenIn, address _tokenOut, uint256 _amount) private {
 
     address[] memory path;
@@ -170,65 +229,6 @@ contract HonorTreasureV1 is Ownable {
     } catch {
     }
     return result;
-  }
-
-  function estimateDualDexTrade(address _router1, address _router2, address _token1, address _token2, uint256 _amount) external view returns (uint256) {
-    uint256 amtBack1 = getAmountOutMin(_router1, _token1, _token2, _amount);
-    uint256 amtBack2 = getAmountOutMin(_router2, _token2, _token1, amtBack1);
-    return amtBack2;
-  }
-  
-  function dualDexTrade(address _router1, address _router2, address _token1, address _token2, uint256 _amount) external onlyOwner {
-    uint startBalance = IERC20(_token1).balanceOf(address(this));
-    uint token2InitialBalance = IERC20(_token2).balanceOf(address(this));
-    swap(_router1,_token1, _token2,_amount);
-    uint token2Balance = IERC20(_token2).balanceOf(address(this));
-    uint tradeableAmount = token2Balance - token2InitialBalance;
-    swap(_router2,_token2, _token1,tradeableAmount);
-    uint endBalance = IERC20(_token1).balanceOf(address(this));
-    require(endBalance > startBalance, "Trade Reverted, No Profit Made");
-  }
-
-  /*
-    Base Asset > Altcoin > Stablecoin > Altcoin > Base Asset
-  */ 
-  function instaSearch(address _router, address _baseAsset, uint256 _amount) external view returns (uint256,address,address,address) {
-    uint256 amtBack;
-    address token1;
-    address token2;
-    address token3;
-    for (uint i1=0; i1<tokens.length; i1++) {
-      for (uint i2=0; i2<stables.length; i2++) {
-        for (uint i3=0; i3<tokens.length; i3++) {
-          amtBack = getAmountOutMin(_router, _baseAsset, tokens[i1], _amount);
-          amtBack = getAmountOutMin(_router, tokens[i1], stables[i2], amtBack);
-          amtBack = getAmountOutMin(_router, stables[i2], tokens[i3], amtBack);
-          amtBack = getAmountOutMin(_router, tokens[i3], _baseAsset, amtBack);
-          if (amtBack > _amount) {
-            token1 = tokens[i1];
-            token2 = tokens[i2];
-            token3 = tokens[i3];
-            break;
-          }
-        }
-      }
-    }
-    return (amtBack,token1,token2,token3);
-  }
-
-  function instaTrade(address _router1, address _token1, address _token2, address _token3, address _token4, uint256 _amount) external onlyOwner {
-    uint startBalance = IERC20(_token1).balanceOf(address(this));
-    uint token2InitialBalance = IERC20(_token2).balanceOf(address(this));
-    uint token3InitialBalance = IERC20(_token3).balanceOf(address(this));
-    uint token4InitialBalance = IERC20(_token4).balanceOf(address(this));
-    swap(_router1,_token1, _token2, _amount);
-    uint tradeableAmount2 = IERC20(_token2).balanceOf(address(this)) - token2InitialBalance;
-    swap(_router1,_token2, _token3, tradeableAmount2);
-    uint tradeableAmount3 = IERC20(_token3).balanceOf(address(this)) - token3InitialBalance;
-    swap(_router1,_token3, _token4, tradeableAmount3);
-    uint tradeableAmount4 = IERC20(_token4).balanceOf(address(this)) - token4InitialBalance;
-    swap(_router1,_token4, _token1, tradeableAmount4);
-    require(IERC20(_token1).balanceOf(address(this)) > startBalance, "Trade Reverted, No Profit Made");
   }
 
   function getBalance (address _tokenContractAddress) external view  returns (uint256) {
