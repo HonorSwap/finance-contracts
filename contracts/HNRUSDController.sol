@@ -56,7 +56,7 @@ contract HNRUSDController is Ownable {
         require(_totalBUSDReserve>=amount,"NOT TREASURE");
 
         IERC20(_hnrusdToken).transferFrom(msg.sender, address(this), amount);
-        IERC20(_xhnrToken).transferFrom(msg.sender, amount.mul(150));
+        IERC20(_xhnrToken).transferFrom(msg.sender,address(this), amount.mul(150));
         uint256 fee=amount.mul(_FEE).div(10000);
 
         uint256 balance=IERC20(_busdToken).balanceOf(address(this));
@@ -76,11 +76,11 @@ contract HNRUSDController is Ownable {
 
     }
 
-    function getBUSDReserve() public view {
+    function getBUSDReserve() public view returns(uint256) {
         return _totalBUSDReserve;
     }
 
-    function getHNRUSDReserve() public view {
+    function getHNRUSDReserve() public view returns(uint256) {
         return IERC20(_hnrusdToken).balanceOf(address(this));
     }
     function recoverEth() external onlyOwner {
