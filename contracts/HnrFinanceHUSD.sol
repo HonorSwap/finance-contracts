@@ -1,11 +1,10 @@
-// SPDX-License-Identifier: MIT
+//SPDX-License-Identifier: MIT
+pragma solidity ^0.8.4;
 
-pragma solidity =0.6.6;
-
-import "./Helpers/SafeMath.sol";
-import "./Helpers/Ownable.sol";
-import "./Helpers/TransferHelper.sol";
-import "./Helpers/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./Helpers/IHonorTreasure.sol";
 
 contract HnrFinanceHUSD is Ownable
 {

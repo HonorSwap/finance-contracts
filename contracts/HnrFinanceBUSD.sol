@@ -1,9 +1,9 @@
-pragma solidity =0.6.6;
+//SPDX-License-Identifier: MIT
+pragma solidity ^0.8.4;
 
-import "./Helpers/SafeMath.sol";
-import "./Helpers/Ownable.sol";
-import "./Helpers/TransferHelper.sol";
-import "./Helpers/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./Helpers/IHonorTreasure.sol";
 
 contract HnrFinanceBUSD is Ownable {
@@ -24,7 +24,7 @@ contract HnrFinanceBUSD is Ownable {
     uint256 public THREEMONTH_INTEREST=4223744292;
     uint256 public MONTH_INTEREST=3611745307;
 
-    uint256 public _awardInterest=1010;
+    uint256 public _awardInterest=105;
 
     event Deposit(address indexed _from,uint256 _amount,uint256 duration);
     event Widthdraw(address indexed _from,uint256 _amount,uint256 duration);
@@ -77,17 +77,12 @@ contract HnrFinanceBUSD is Ownable {
         _totalAmount=_totalAmount.add(amount);
         require(_totalAmount<=_maxTotalAmount,"Max Total Deposit");
         
-
-        TransferHelper.safeTransferFrom(_busdToken, msg.sender, address(_honorTreasure), amount);
-
         _honorTreasure.depositBUSD(amount);
 
         balance.amount=amount;
         balance.duration=duration;
         balance.interest_rate=interest_rate;
         balance.start_time=block.timestamp;
-
-        _totalAmount=_totalAmount.add(amount);
 
         emit Deposit(msg.sender,amount,duration);
     }
@@ -102,9 +97,13 @@ contract HnrFinanceBUSD is Ownable {
 
         uint256 income=getIncome(balance.amount,duration,balance.interest_rate);
         uint256 lastBalance=balance.amount.add(income);
-        if(!_honorTreasure.widthdrawBUSD(lastBalance))
+        if(_honorTreasure.getBUSDTreasure()>=lastBalance)
         {
-            _awardHonor(lastBalance);
+            _honorTreasure.widthdrawBUSD(lastBalance);
+        }
+        else
+        {
+            _awardHonor(lastBalance,income);
         }
 
         _totalAmount=_totalAmount.sub(balance.amount);
@@ -117,10 +116,11 @@ contract HnrFinanceBUSD is Ownable {
         
     }
 
-    function _awardHonor(uint256 busdAmount) private {
-        uint256 lastAmount=busdAmount.mul(_awardInterest).div(1000);
-        (uint256 busdRes,uint256 honorRes) = _honorTreasure.getLPReserves(_busdToken, _honorToken);
-        uint256 honorCount=lastAmount.div(busdRes).mul(honorRes);
+    function _awardHonor(uint256 busdAmount,uint256 income) private {
+        uint256 incomeLast=income.mul(_awardInterest).div(100);
+        uint256 amount=busdAmount.sub(income).add(incomeLast);
+        (uint256 busdRes,uint256 honorRes) = _honorTreasure.getPairAllReserve(_busdToken, _honorToken);
+        uint256 honorCount=amount.div(busdRes).mul(honorRes);
         
         //mint honor
     }

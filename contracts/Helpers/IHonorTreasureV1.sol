@@ -6,4 +6,6 @@ interface IHonorTreasureV1 {
     function depositHNRUSD(uint256 amount) external;
     function depositBUSDForHNRUSD(uint256 amount) external;
     function widthdrawBUSDforHNRUSD(uint256 amount) external;
+    function getPairAllReserve(address token0,address token1) external view returns(uint112 ,uint112 );
+    function getBUSDTreasure() public view returns(uint256)
 }

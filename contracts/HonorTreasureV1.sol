@@ -7,8 +7,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-
-
 interface IUniswapV2Router {
   function factory() external pure returns (address);
   function getAmountsOut(uint256 amountIn, address[] memory path) external view returns (uint256[] memory amounts);
@@ -446,6 +444,13 @@ function swap(address router, address _tokenIn, address _tokenOut, uint256 _amou
       
       return res.mul(balance).div(totalSupply);
 
+    }
+
+    function getPairAllReserve(address token0,address token1) public view returns(uint112 ,uint112 ) {
+      address pair=IUniswapV2Factory(IUniswapV2Router(_honorRouter).factory()).getPair(token0,token1);
+      (uint112 res_0,uint112 res_1,)=IUniswapV2Pair(pair).getReserves();
+
+      IUniswapV2Pair(pair).token0()==token0 ? return(res_0,res_1) : return(res_1,res_0);
     }
 
     function getHNRUSDTreasure() public view returns(uint256) {
