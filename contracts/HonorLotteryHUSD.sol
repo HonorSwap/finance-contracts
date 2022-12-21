@@ -16,6 +16,12 @@ contract HonorLotteryHUSD is Ownable {
         uint256 totalPrize;
         uint48[] _tickets;
         uint48 winNumber;
+        uint32 win3Count;
+        uint32 win4Count;
+        uint32 win5Count;
+        uint32 win6Count;
+        uint checkedID;
+        bool checked;
     }
 
     struct UserTickets
@@ -34,13 +40,21 @@ contract HonorLotteryHUSD is Ownable {
     uint256 _FEE=5;
     address public _hnrusd;
 
+    uint[] _checkLottery;
+
+    uint256 _freeBalance;
+
+    function checkWinNumber(uint256 num) public pure returns(uint48)
+    {
+        return uint48(num);
+    }
     function buyTickets(uint48[] memory tickets,uint lotteryID) public {
         Lottery storage lottery=_lotteries[lotteryID];
         require(lottery.startBlock>=block.number && lottery.endBlock<block.number,"ERROR LOT ID");
 
         uint256 count=tickets.length;
 
-        require(count<=20,"MAX TICKET 20");
+        require(count<=20 && count>0,"MAX TICKET 20");
 
         uint256 price=lottery.ticketPrice.mul(count);
         if(count>=5 && count<10)
@@ -59,9 +73,70 @@ contract HonorLotteryHUSD is Ownable {
 
         IERC20(_hnrusd).transferFrom(msg.sender, address(this), price);
         IERC20(_hnrusd).transfer(_feeTo, fee);
-        price=price.sub(_fee);
+        price=price.sub(fee);
         lottery.totalPrize=lottery.totalPrize.add(price);
         
+        for(uint i=0;i<count;i++)
+        {
+            lottery._tickets.push(tickets[i]);
+            _userTickets[msg.sender][lotteryID].push(tickets[i]);
+        }
+    }
+
+    function finishLottery(uint lotID,uint48 winNumber) public onlyOwner {
+        Lottery storage lot=_lotteries[lotID];
+        lot.winNumber=winNumber;
+        if(lot._tickets.length>0)
+        {
+            uint256 balance=lot.balanceStart + lot.totalPrize;
+            if(balance>0)
+            {
+                lot.balanceStart=0;
+                lot.totalPrize=balance.sub(balance.div(5));
+                _freeBalance=_freeBalance.add(balance.div(5));
+            }
+            _checkLottery.push(lotID);
+        }
+    }
+
+    function checkLottery() public {
+        if(_checkLottery.length>0)
+        {
+            Lottery storage lot=_lotteries[_checkLottery[0]];
+            uint count=lot._tickets.length;
+            
+            for(uint i=0;i<20;i++)
+            {
+                if(lot.checked)
+                {
+                    break;
+                }
+                    
+                uint48 ticket=lot._tickets[lot.checkedID];
+                lot.checkedID+=1;
+                
+                if(lot.checkedID==count)
+                {
+                    lot.checked=true;
+                }
+
+                if(ticket==lot.winNumber)
+                {
+                    lot.win6Count++;
+                    continue;
+                }
+                
+                /*
+                    Check Ticket This Area
+                    
+                */
+                
+            }
+        }
+    }
+
+    function checkTicket(uint48 ticket,uint48 win) public returns(uint) {
+
     }
    
 }

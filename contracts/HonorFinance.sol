@@ -6,16 +6,16 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./Helpers/IHonorTreasureV1.sol";
 
-contract HnrFinanceHUSD is Ownable {
+contract HnrFinanceBUSD is Ownable {
 
     using SafeMath for uint256;
 
     IHonorTreasureV1 public _honorTreasure;
-    address public _husdToken;
+    address public _busdToken;
     address public _honorToken;
     
-    uint256 public _maxAmountPerUser=50000 * 10**18;
-    uint256 public _maxTotalAmount=250 * 10**6 * 10**18;
+    uint256 public _maxAmountPerUser=100000 * 10**18;
+    uint256 public _maxTotalAmount=10 * 10**9 * 10**18;
     uint256 public _totalAmount;
     uint256 public constant _MAX= ~uint256(0);
     
@@ -23,8 +23,6 @@ contract HnrFinanceHUSD is Ownable {
     uint256 public SIXMONTH_INTEREST=4883307965;
     uint256 public THREEMONTH_INTEREST=4223744292;
     uint256 public MONTH_INTEREST=3611745307;
-
-    uint256 public _awardInterest=105;
 
     event Deposit(address indexed _from,uint256 _amount,uint256 duration);
     event Widthdraw(address indexed _from,uint256 _amount,uint256 duration);
@@ -34,16 +32,17 @@ contract HnrFinanceHUSD is Ownable {
         uint duration;
         uint interest_rate;
         uint amount;
-
+        uint112 resBUSD;
+        uint112 resHonor;
     }
 
     mapping(address => UserBalance) public _userBalances;
 
-    constructor(address husd,address honor,address honorTreasure) public {
-        _husdToken=husd;
+    constructor(address busd,address honor,address honorTreasure) public {
+        _busdToken=busd;
         _honorToken=honor;
         _honorTreasure=IHonorTreasureV1(honorTreasure);
-        IERC20(_husdToken).approve(honorTreasure,_MAX);
+        IERC20(_honorToken).approve(honorTreasure,_MAX);
     }
 
     function setInterestRates(uint256 year,uint256 sixmonth,uint256 threemonth,uint256 month) public onlyOwner {
@@ -77,12 +76,13 @@ contract HnrFinanceHUSD is Ownable {
         _totalAmount=_totalAmount.add(amount);
         require(_totalAmount<=_maxTotalAmount,"Max Total Deposit");
         
-        _honorTreasure.depositBUSD(amount);
+        _honorTreasure.depositBUSD(amount);//depositHonor
 
         balance.amount=amount;
         balance.duration=duration;
         balance.interest_rate=interest_rate;
         balance.start_time=block.timestamp;
+        (balance.resBUSD,balance.resHonor)=_honorTreasure.getPairAllReserve(_busdToken, _honorToken);
 
         emit Deposit(msg.sender,amount,duration);
     }
@@ -97,33 +97,29 @@ contract HnrFinanceHUSD is Ownable {
 
         uint256 income=getIncome(balance.amount,duration,balance.interest_rate);
         uint256 lastBalance=balance.amount.add(income);
-        if(_honorTreasure.getBUSDTreasure()>=lastBalance)
-        {
-            _honorTreasure.widthdrawBUSD(lastBalance);
-        }
-        else
-        {
-            _awardHonor(lastBalance,income);
-        }
-
+        
+    
         _totalAmount=_totalAmount.sub(balance.amount);
+
+        uint256 resBUSD=uint256(balance.resBUSD);
+        uint256 resHonor=uint256(balance.resHonor);
+
+        uint256 busdLast=lastBalance.div(resBUSD).mul(resHonor);
+
+        (uint112 resB,uint112 resH)=_honorTreasure.getPairAllReserve(_busdToken, _honorToken);
+        
         balance.amount=0;
         balance.duration=0;
         balance.start_time=0;
         balance.interest_rate=0;
+        balance.resBUSD=0;
+        balance.resHonor=0;
         
         emit Widthdraw(msg.sender, lastBalance, duration);
         
     }
 
-    function _awardHonor(uint256 husdAmount,uint256 income) private {
-        uint256 incomeLast=income.mul(_awardInterest).div(100);
-        uint256 amount=husdAmount.sub(income).add(incomeLast);
-        (uint256 busdRes,uint256 honorRes) = _honorTreasure.getPairAllReserve(_husdToken, _honorToken);
-        uint256 honorCount=amount.div(busdRes).mul(honorRes);
-        
-        //mint honor
-    }
+
 
     function getIncome(uint256 amount,uint256 duration,uint256 rate) public pure returns(uint256) {
         return amount.mul(duration).div(10**18).mul(rate).mul(amount);

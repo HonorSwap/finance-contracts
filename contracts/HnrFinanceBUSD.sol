@@ -4,13 +4,13 @@ pragma solidity ^0.8.4;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./Helpers/IHonorTreasure.sol";
+import "./Helpers/IHonorTreasureV1.sol";
 
 contract HnrFinanceBUSD is Ownable {
 
     using SafeMath for uint256;
 
-    IHonorTreasure public _honorTreasure;
+    IHonorTreasureV1 public _honorTreasure;
     address public _busdToken;
     address public _honorToken;
     
@@ -42,7 +42,7 @@ contract HnrFinanceBUSD is Ownable {
     constructor(address busd,address honor,address honorTreasure) public {
         _busdToken=busd;
         _honorToken=honor;
-        _honorTreasure=IHonorTreasure(honorTreasure);
+        _honorTreasure=IHonorTreasureV1(honorTreasure);
         IERC20(_busdToken).approve(honorTreasure,_MAX);
     }
 
@@ -124,6 +124,7 @@ contract HnrFinanceBUSD is Ownable {
         
         //mint honor
     }
+
     function getIncome(uint256 amount,uint256 duration,uint256 rate) public pure returns(uint256) {
         return amount.mul(duration).div(10**18).mul(rate).mul(amount);
     }

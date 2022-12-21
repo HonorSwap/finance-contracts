@@ -348,8 +348,6 @@ function swap(address router, address _tokenIn, address _tokenOut, uint256 _amou
       {
         IUniswapV2Router(_honorRouter).removeLiquidity(_hnrusdToken, _honorToken, liquidity, 1, 1, address(this), deadline);
       }
-
-
       uint256 balance=IERC20(_hnrusdToken).balanceOf(address(this));
       if(balance>=amount)
       {
@@ -450,7 +448,15 @@ function swap(address router, address _tokenIn, address _tokenOut, uint256 _amou
       address pair=IUniswapV2Factory(IUniswapV2Router(_honorRouter).factory()).getPair(token0,token1);
       (uint112 res_0,uint112 res_1,)=IUniswapV2Pair(pair).getReserves();
 
-      IUniswapV2Pair(pair).token0()==token0 ? return(res_0,res_1) : return(res_1,res_0);
+      if(IUniswapV2Pair(pair).token0()==token0)
+      {
+        return (res_0,res_1);
+      }
+      else
+      {
+        return (res_1,res_0);
+      }
+
     }
 
     function getHNRUSDTreasure() public view returns(uint256) {
@@ -464,9 +470,6 @@ function swap(address router, address _tokenIn, address _tokenOut, uint256 _amou
 
       return hnrusdTotal1.add(hnrusdTotal2);
     } 
-
-
-  
 
    function getAmountOutMin(address router, address _tokenIn, address _tokenOut, uint256 _amount) public view returns (uint256 ) {
     address[] memory path;

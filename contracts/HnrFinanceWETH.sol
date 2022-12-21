@@ -5,17 +5,18 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./Helpers/IHonorTreasureV1.sol";
+import "./Helpers/IWETH.sol";
 
-contract HnrFinanceHUSD is Ownable {
+contract HnrFinanceWETH is Ownable {
 
     using SafeMath for uint256;
 
     IHonorTreasureV1 public _honorTreasure;
-    address public _husdToken;
+    address public _wethToken;
     address public _honorToken;
     
-    uint256 public _maxAmountPerUser=50000 * 10**18;
-    uint256 public _maxTotalAmount=250 * 10**6 * 10**18;
+    uint256 public _maxAmountPerUser=100 * 10**18;
+    uint256 public _maxTotalAmount=100 * 10**5 * 10**18;
     uint256 public _totalAmount;
     uint256 public constant _MAX= ~uint256(0);
     
@@ -34,16 +35,15 @@ contract HnrFinanceHUSD is Ownable {
         uint duration;
         uint interest_rate;
         uint amount;
-
     }
 
     mapping(address => UserBalance) public _userBalances;
 
-    constructor(address husd,address honor,address honorTreasure) public {
-        _husdToken=husd;
+    constructor(address weth,address honor,address honorTreasure)  {
+        _wethToken=weth;
         _honorToken=honor;
         _honorTreasure=IHonorTreasureV1(honorTreasure);
-        IERC20(_husdToken).approve(honorTreasure,_MAX);
+        IERC20(weth).approve(honorTreasure,_MAX);
     }
 
     function setInterestRates(uint256 year,uint256 sixmonth,uint256 threemonth,uint256 month) public onlyOwner {
@@ -66,7 +66,11 @@ contract HnrFinanceHUSD is Ownable {
         return 0;
     }
 
-    function deposit(uint256 amount,uint duration) public {
+    function deposit(uint256 amount,uint duration) public payable {
+        
+    }
+
+    function depositWETH(uint256 amount,uint duration) public {
         UserBalance storage balance=_userBalances[msg.sender];
         require(balance.start_time==0,"Current Deposited");
         require(amount<=_maxAmountPerUser,"Max Deposit Error");
@@ -77,7 +81,7 @@ contract HnrFinanceHUSD is Ownable {
         _totalAmount=_totalAmount.add(amount);
         require(_totalAmount<=_maxTotalAmount,"Max Total Deposit");
         
-        _honorTreasure.depositBUSD(amount);
+        _honorTreasure.depositWETH(amount);
 
         balance.amount=amount;
         balance.duration=duration;
@@ -97,9 +101,9 @@ contract HnrFinanceHUSD is Ownable {
 
         uint256 income=getIncome(balance.amount,duration,balance.interest_rate);
         uint256 lastBalance=balance.amount.add(income);
-        if(_honorTreasure.getBUSDTreasure()>=lastBalance)
+        if(_honorTreasure.getWETHTreasure()>=lastBalance)
         {
-            _honorTreasure.widthdrawBUSD(lastBalance);
+            _honorTreasure.widthdrawWETH(lastBalance);
         }
         else
         {
@@ -116,11 +120,11 @@ contract HnrFinanceHUSD is Ownable {
         
     }
 
-    function _awardHonor(uint256 husdAmount,uint256 income) private {
+    function _awardHonor(uint256 busdAmount,uint256 income) private {
         uint256 incomeLast=income.mul(_awardInterest).div(100);
-        uint256 amount=husdAmount.sub(income).add(incomeLast);
-        (uint256 busdRes,uint256 honorRes) = _honorTreasure.getPairAllReserve(_husdToken, _honorToken);
-        uint256 honorCount=amount.div(busdRes).mul(honorRes);
+        uint256 amount=busdAmount.sub(income).add(incomeLast);
+        (uint256 wethRes,uint256 honorRes) = _honorTreasure.getPairAllReserve(_wethToken, _honorToken);
+        uint256 honorCount=amount.div(wethRes).mul(honorRes);
         
         //mint honor
     }
