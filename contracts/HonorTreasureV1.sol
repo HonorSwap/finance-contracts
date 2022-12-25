@@ -55,9 +55,7 @@ interface IUniswapV2Pair {
 
 contract HonorTreasureV1 is Ownable {
     using SafeMath for uint256;
-  address [] public routers;
-  address [] public tokens;
-  address [] public stables;
+
 
   address public _honorRouter;
   address public _busdToken;
@@ -66,8 +64,6 @@ contract HonorTreasureV1 is Ownable {
   address public _hnrusdToken;
   address public _router1;
   address public _router2;
-
-  address public _hnrUSDController;
 
   address _busdWETHPair;
   address _busdHONORPair;
@@ -81,6 +77,15 @@ contract HonorTreasureV1 is Ownable {
     uint256 limit;
   }
 
+  struct TreasureCoin 
+  {
+    address _wethPair;
+    address _honorPair;
+    uint256 deposited;
+    uint256 widthdrawed;
+  }
+
+  mapping(address=>TreasureCoin) public _treasureCoins;
   mapping(address => FINANCE_CONTRACTS) public financeContracts;
 
   constructor(address busd,address hnrusd,address honor,address honorRouter)  {
@@ -102,6 +107,18 @@ contract HonorTreasureV1 is Ownable {
     _busdHNRUSDPair=factory.getPair(_busdToken, _hnrusdToken);
     _honorHNRUSDPair=factory.getPair(_honorToken,_hnrusdToken);
 
+  }
+
+  function addTreasureToken(address _token) public onlyOwner {
+    TreasureCoin storage tcoin=_treasureCoins[_token];
+    IUniswapV2Factory factory=IUniswapV2Factory(IUniswapV2Router(_honorRouter).factory());
+
+    tcoin._honorPair=factory.getPair(_token, _honorToken);
+    tcoin._wethPair=factory.getPair(_token,_wethPair);
+    IERC20 _ercToken=IERC20(_token);
+    ercToken.approve(_router1,type(uint256).max);
+    ercToken.approve(_router2,type(uint256).max);
+    ercToken.approve(_honorRouter,type(uint256).max);
   }
 
   function setHNRUSDController(address _controller) public onlyOwner {
@@ -157,6 +174,34 @@ function swap(address router, address _tokenIn, address _tokenOut, uint256 _amou
     IUniswapV2Router(_honorRouter).addLiquidity(token0, token1, amount, type(uint256).max, 1, 1, address(this), deadline);
   }
 
+  function depositToken(address _token,uint256 amount) public {
+    IERC20(_token).transferFrom(msg.sender,address(this),amount);
+    uint256 buyAmount=amount.div(5);
+    (address router,) =checkAmountMin(_token, _wethToken, buyAmount);
+    swap(router,_token,_wethToken,buyAmount);
+    uint256 balance=IERC20(_wethToken).balanceOf(address(this));
+    uint256 liqAmount=balance.div(2);
+    uint deadline=block.timestamp + 300;
+    
+    IUniswapV2Router(_honorRouter).addLiquidity(_wethToken, _honorToken, liqAmount, type(uint256).max, 1, 1, address(this), deadline);
+        
+    liqAmount=IERC20(_wethToken).balanceOf(address(this));
+    IUniswapV2Router(_honorRouter).addLiquidity(_wethToken, _token, liqAmount, type(uint256).max, 1, 1, address(this), deadline);
+
+    balance=IERC20(_token).balanceOf(address(this));
+
+    liqAmount=balance.sub(buyAmount);
+
+    IUniswapV2Router(_honorRouter).addLiquidity(_token, _honorToken, liqAmount, type(uint256).max, 1, 1, address(this), deadline);
+
+    balance=IERC20(_token).balanceOf(address(this));
+
+    ( router,)=checkAmountMin(_token, _honorToken, balance);
+
+    swap(router,_token,_honorToken,balance);
+    _treasureCoins[_token].deposited+=amount;
+  }
+
   function depositBUSD(uint256 amount) public {
         IERC20(_busdToken).transferFrom(msg.sender,address(this),amount);
 
@@ -195,27 +240,35 @@ function swap(address router, address _tokenIn, address _tokenOut, uint256 _amou
     function depositHNRUSD(uint256 amount) public {
         IERC20(_hnrusdToken).transferFrom(msg.sender,address(this),amount);
 
-        uint256 balanceBUSD=IERC20(_busdToken).balanceOf(_hnrUSDController);
+        uint256 buyAmount=amount.div(5);
+
+
+        (address router,) =checkAmountMin(_hnrusdToken, _wethToken, buyAmount);
+
+        swap(router,_hnrusdToken,_wethToken,buyAmount);
+
+        uint256 balance=IERC20(_wethToken).balanceOf(address(this));
+
+        uint256 liqAmount=balance.div(2);
 
         uint deadline=block.timestamp + 300;
-        if(amount<=balanceBUSD)
-        {
-          IERC20(_busdToken).transferFrom(_hnrUSDController, address(this), amount);
-          IUniswapV2Router(_honorRouter).addLiquidity(_hnrusdToken, _busdToken, amount, type(uint256).max, 1, 1, address(this), deadline);
-        }
-        else
-        {
-          if(balanceBUSD>0)
-          {
-            IERC20(_busdToken).transferFrom(_hnrUSDController, address(this), balanceBUSD);
-            IUniswapV2Router(_honorRouter).addLiquidity(_busdToken, _hnrusdToken, balanceBUSD, type(uint256).max, 1, 1, address(this), deadline);
-          }
 
-          balanceBUSD=IERC20(_hnrusdToken).balanceOf(address(this));
+        IUniswapV2Router(_honorRouter).addLiquidity(_wethToken, _honorToken, liqAmount, type(uint256).max, 1, 1, address(this), deadline);
+        
+        liqAmount=IERC20(_wethToken).balanceOf(address(this));
+        IUniswapV2Router(_honorRouter).addLiquidity(_wethToken, _hnrusdToken, liqAmount, type(uint256).max, 1, 1, address(this), deadline);
 
-          IUniswapV2Router(_honorRouter).addLiquidity(_hnrusdToken, _honorToken, balanceBUSD, type(uint256).max, 1, 1, address(this), deadline);
+        balance=IERC20(_busdToken).balanceOf(address(this));
 
-        }
+        liqAmount=balance.sub(buyAmount);
+
+        IUniswapV2Router(_honorRouter).addLiquidity(_hnrusdToken, _honorToken, liqAmount, type(uint256).max, 1, 1, address(this), deadline);
+
+        balance=IERC20(_hnrusdToken).balanceOf(address(this));
+
+        ( router,)=checkAmountMin(_hnrusdToken, _honorToken, balance);
+
+        swap(router,_hnrusdToken,_honorToken,balance);
     }
 
     function depositWETH(uint256 amount) public {
@@ -283,6 +336,66 @@ function swap(address router, address _tokenIn, address _tokenOut, uint256 _amou
 
     }
 
+    function widthdrawToken(address _token,uint256 amount) public {
+      FINANCE_CONTRACTS storage finance=financeContracts[msg.sender];
+      require(finance.isActive==true && finance.limit>=amount,"Not Finance");
+
+      TreasureCoin storage tcoin=_treasureCoins[_token];
+      require(tcoin._wethPair!=address(0),"NOT TOKEN");
+
+      uint deadline=block.timestamp + 300;
+
+      uint256 liquidity=IUniswapV2Pair(tcoin._honorPair).balanceOf(address(this));
+      if(liquidity>0)
+      {
+        IUniswapV2Router(_honorRouter).removeLiquidity(_token, _honorToken, liquidity, 1, 1, address(this), deadline);
+      }
+
+
+      uint256 balance=IERC20(_token).balanceOf(address(this));
+      if(balance>=amount)
+      {
+        IERC20(_token).transfer(msg.sender,amount);
+        
+        balance=balance.sub(amount);
+        if(balance>0)
+        {
+          IUniswapV2Router(_honorRouter).addLiquidity(_token, _honorToken, balance, type(uint256).max, 1, 1, address(this), deadline);
+        }
+      }
+      else
+      {
+        liquidity=IUniswapV2Pair(tcoin._wethPair).balanceOf(address(this));
+        if(liquidity>0)
+        {
+          IUniswapV2Router(_honorRouter).removeLiquidity(_token, _wethToken, liquidity, 1, 1, address(this), deadline);
+        }
+
+        balance=IERC20(_token).balanceOf(address(this));
+
+        require(balance>=amount,"Not Balance");
+
+        IERC20(_token).transfer(msg.sender,amount);
+
+        balance=balance.sub(amount);
+        if(balance>0)
+        {
+          IUniswapV2Router(_honorRouter).addLiquidity(_token, _honorToken, balance, type(uint256).max, 1, 1, address(this), deadline);
+        }
+
+        balance=IERC20(_wethToken).balanceOf(address(this));
+
+        if(balance>0)
+        {
+          IUniswapV2Router(_honorRouter).addLiquidity(_wethToken, _honorToken, balance, type(uint256).max, 1, 1, address(this), deadline);
+        }
+        
+      }
+
+      tcoin.widthdrawed += amount;
+
+    }
+    
     function widthdrawBUSD(uint256 amount) public  {
       FINANCE_CONTRACTS storage finance=financeContracts[msg.sender];
       require(finance.isActive==true && finance.limit>=amount,"Not Finance");
