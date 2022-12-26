@@ -8,8 +8,8 @@ const { ethers } = require("hardhat");
 
 
 
-const HonorTreseureAddress="0xFd4355C15e0F3Daf7f07FE208AA3502EabeF77DF";
-const financeBUSDAddress="0x933Ac07385bA32ed43241f9DfD38C018Aa53433F";
+const HonorTreseureAddress="0xfB30056203a0F3a7Ee0388E75cBF8f02613e6a27";
+const financeAddress="0x03690C32bFA38f0581Fe22449a928560b52AaC48";
 const busdAddress="0x388672B44fD9370EAae35Ccc7A4a32F10b54da62";
 const honorAddress="0x37CA99B38902c90fE8BDB23D5FDcD36D0a46Ef93";
 const router1Address="0xD99D1c33F9fC3444f8101754aBC46c52416550D1";
@@ -69,6 +69,7 @@ async function getERC20(tokenAddress,signer) {
       */
      await busdToken.approve(HonorTreseureAddress,parseETH("10000000"));
       await honorToken.transfer(HonorTreseureAddress,parseETH("5000"));
+      await busdToken.approve(financeAddress,parseETH("10000000"));
     })
     
 

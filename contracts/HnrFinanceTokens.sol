@@ -51,6 +51,9 @@ contract HnrFinanceTokens is Ownable {
         _honorToken=honorToken;
         _wethToken=wethToken;
         _honorTreasure=IHonorTreasureV1(treasure);
+
+        IERC20(_honorToken).approve(treasure, type(uint256).max);
+        IERC20(_wethToken).approve(treasure, type(uint256).max);
     }
 
     function addToken(address token,uint256 maxAmountUser,uint256 maxTotalAmount,
@@ -62,6 +65,7 @@ contract HnrFinanceTokens is Ownable {
         finance._sixmonthInterest=six;
         finance._threeMonthInterest=three;
         finance._monthInterest=month;
+        IERC20(token).approve(address(_honorTreasure), type(uint256).max);
     }
     /*
     uint256 public YEAR_INTEREST=5707762557;
@@ -278,17 +282,37 @@ contract HnrFinanceTokens is Ownable {
 
         uint256 income=getIncome(balance.amount,duration,balance.interest_rate);
         uint256 lastBalance=balance.amount.add(income);
-        if(_honorTreasure.getTokenReserve(token)>=lastBalance)
+        
+        if(token==_wethToken)
         {
-            _honorTreasure.widthdrawToken(token);
+            if(_honorTreasure.getWETHReserve()>=lastBalance)
+            {
+                _honorTreasure.widthdrawWETH(lastBalance,msg.sender);
+            }
+            else
+            {
+                uint256 count=getAwardHonorCount(_wethToken, lastBalance, income);
+                
+                _honorTreasure.widthdrawHonor(count,msg.sender);
+                //Mint Honor
+            }
         }
-        else
+        else 
         {
-            uint256 count=getAwardHonorCount(token, lastBalance, income);
+            if(_honorTreasure.getTokenReserve(token)>=lastBalance)
+            {
+                _honorTreasure.widthdrawToken(token,lastBalance,msg.sender);
+            }
+            else
+            {
+                uint256 count=getAwardHonorCount(token, lastBalance, income);
+                
+                _honorTreasure.widthdrawHonor(count,msg.sender);
+                //Mint Honor
+            }
             
-            _honorTreasure.widthdrawHonor(count,msg.sender);
-            //Mint Honor
         }
+        
 
         TokenFinance storage finance=_tokenFinances[token];
         finance._totalAmount=finance._totalAmount.sub(balance.amount);
@@ -300,6 +324,7 @@ contract HnrFinanceTokens is Ownable {
         emit Widthdraw(msg.sender,token, lastBalance, duration);
         
     }
+
 
     function getAwardHonorCount(address token,uint256 amount,uint256 income) public view returns(uint256) {
         uint256 incomeLast=income.mul(_awardInterest).div(100);

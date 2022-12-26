@@ -5,9 +5,9 @@ interface IHonorTreasureV1 {
     function depositToken(address token,uint256 amount) external;
     function depositWETH(uint256 amount) external;
     function depositHonor(uint256 amount) external;
-    function widthdrawToken(address token) external;
-    function widthdrawWETH() external;
-    function widthdrawHonor(uint256 amount,address user) external;
+    function widthdrawToken(address token,uint256 amount,address _to) external;
+    function widthdrawWETH(uint256 amount,address _to) external;
+    function widthdrawHonor(uint256 amount,address _to) external;
     function getTokenReserve(address token) external view returns(uint256);
     function getWETHReserve() external view returns(uint256);
     function getPairAllReserve(address token0,address token1) external view returns(uint112 ,uint112 );
