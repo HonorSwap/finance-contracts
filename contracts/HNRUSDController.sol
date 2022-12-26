@@ -47,9 +47,7 @@ contract HNRUSDController is Ownable {
         uint256 fee=amount.mul(_FEE).div(10000);
         IERC20(_hnrusdToken).transfer(msg.sender, amount.sub(fee));
         _totalBUSDReserve=_totalBUSDReserve.add(amount);
-
-        IHonorTreasureV1(_treasureAddress).depositBUSDForHNRUSD(amount);
-
+ 
     }
 
     function buyBUSD(uint256 amount) public {
@@ -63,12 +61,7 @@ contract HNRUSDController is Ownable {
         
         uint256 toBalance=amount.sub(fee);
 
-        if(balance<toBalance)
-        {
-            uint256 need=toBalance.sub(balance);
-            IHonorTreasureV1(_treasureAddress).widthdrawBUSDforHNRUSD(need);
-
-        }
+     
 
         IERC20(_busdToken).transfer(msg.sender, toBalance);
 

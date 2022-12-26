@@ -114,17 +114,12 @@ contract HonorTreasureV1 is Ownable {
     IUniswapV2Factory factory=IUniswapV2Factory(IUniswapV2Router(_honorRouter).factory());
 
     tcoin._honorPair=factory.getPair(_token, _honorToken);
-    tcoin._wethPair=factory.getPair(_token,_wethPair);
+    tcoin._wethPair=factory.getPair(_token,_wethToken);
     IERC20 _ercToken=IERC20(_token);
-    ercToken.approve(_router1,type(uint256).max);
-    ercToken.approve(_router2,type(uint256).max);
-    ercToken.approve(_honorRouter,type(uint256).max);
+    _ercToken.approve(_router1,type(uint256).max);
+    _ercToken.approve(_router2,type(uint256).max);
+    _ercToken.approve(_honorRouter,type(uint256).max);
   }
-
-  function setHNRUSDController(address _controller) public onlyOwner {
-    _hnrUSDController=_controller;
-  }
-
 
   function checkAmountMin(address _tokenIn, address _tokenOut, uint256 _amount) public view returns(address,uint256) {
     uint256 ret0=getAmountOutMin(_honorRouter, _tokenIn, _tokenOut, _amount);
@@ -396,110 +391,6 @@ function swap(address router, address _tokenIn, address _tokenOut, uint256 _amou
 
     }
     
-    function widthdrawBUSD(uint256 amount) public  {
-      FINANCE_CONTRACTS storage finance=financeContracts[msg.sender];
-      require(finance.isActive==true && finance.limit>=amount,"Not Finance");
-      
-      uint deadline=block.timestamp + 300;
-
-      uint256 liquidity=IUniswapV2Pair(_busdHONORPair).balanceOf(address(this));
-      if(liquidity>0)
-      {
-        IUniswapV2Router(_honorRouter).removeLiquidity(_busdToken, _honorToken, liquidity, 1, 1, address(this), deadline);
-      }
-
-
-      uint256 balance=IERC20(_busdToken).balanceOf(address(this));
-      if(balance>=amount)
-      {
-        IERC20(_busdToken).transfer(msg.sender,amount);
-        
-        balance=balance.sub(amount);
-        if(balance>0)
-        {
-          IUniswapV2Router(_honorRouter).addLiquidity(_busdToken, _honorToken, balance, type(uint256).max, 1, 1, address(this), deadline);
-        }
-      }
-      else
-      {
-        liquidity=IUniswapV2Pair(_busdWETHPair).balanceOf(address(this));
-        if(liquidity>0)
-        {
-          IUniswapV2Router(_honorRouter).removeLiquidity(_busdToken, _wethToken, liquidity, 1, 1, address(this), deadline);
-        }
-
-        balance=IERC20(_busdToken).balanceOf(address(this));
-
-        require(balance>=amount,"Not Balance");
-
-        IERC20(_busdToken).transfer(msg.sender,amount);
-
-        balance=balance.sub(amount);
-        if(balance>0)
-        {
-          IUniswapV2Router(_honorRouter).addLiquidity(_busdToken, _honorToken, balance, type(uint256).max, 1, 1, address(this), deadline);
-        }
-
-        balance=IERC20(_wethToken).balanceOf(address(this));
-
-        if(balance>0)
-        {
-          IUniswapV2Router(_honorRouter).addLiquidity(_wethToken, _honorToken, balance, type(uint256).max, 1, 1, address(this), deadline);
-        }
-        
-      }
-    }
-
-    function widthdrawHNRUSD(uint256 amount) public {
-      FINANCE_CONTRACTS storage finance=financeContracts[msg.sender];
-      require(finance.isActive==true && finance.limit>=amount,"Not Finance");
-      
-      uint deadline=block.timestamp + 300;
-
-      uint256 liquidity=IUniswapV2Pair(_honorHNRUSDPair).balanceOf(address(this));
-      if(liquidity>0)
-      {
-        IUniswapV2Router(_honorRouter).removeLiquidity(_hnrusdToken, _honorToken, liquidity, 1, 1, address(this), deadline);
-      }
-      uint256 balance=IERC20(_hnrusdToken).balanceOf(address(this));
-      if(balance>=amount)
-      {
-        IERC20(_hnrusdToken).transfer(msg.sender,amount);
-        
-        balance=balance.sub(amount);
-        if(balance>0)
-        {
-          IUniswapV2Router(_honorRouter).addLiquidity(_hnrusdToken, _honorToken, balance, type(uint256).max, 1, 1, address(this), deadline);
-        }
-      }
-      else
-      {
-        liquidity=IUniswapV2Pair(_busdHNRUSDPair).balanceOf(address(this));
-        if(liquidity>0)
-        {
-          IUniswapV2Router(_honorRouter).removeLiquidity(_busdToken, _hnrusdToken, liquidity, 1, 1, address(this), deadline);
-        }
-
-        balance=IERC20(_hnrusdToken).balanceOf(address(this));
-
-        require(balance>=amount,"Not Balance");
-
-        IERC20(_hnrusdToken).transfer(msg.sender,amount);
-
-        balance=balance.sub(amount);
-        if(balance>0)
-        {
-          IUniswapV2Router(_honorRouter).addLiquidity(_hnrusdToken, _honorToken, balance, type(uint256).max, 1, 1, address(this), deadline);
-        }
-
-        balance=IERC20(_busdToken).balanceOf(address(this));
-
-        if(balance>0)
-        {
-          IERC20(_busdToken).transfer(_hnrUSDController,balance);
-        }
-      }
-    } 
 
     function getPairReserve(address pair) public view returns(uint256 res0,uint256 res1) {
       (uint112 res_0,uint112 res_1,)=IUniswapV2Pair(pair).getReserves();
@@ -512,19 +403,9 @@ function swap(address router, address _tokenIn, address _tokenOut, uint256 _amou
       res1=res1.mul(balance).div(totalSupply);
     }
     
-    function getBUSDTreasure() public view returns(uint256) {
-      (uint256 res0,uint256 res1)=getPairReserve(_busdHONORPair);
+ 
 
-      uint256 busdTotal1=IUniswapV2Pair(_busdHONORPair).token0() == _busdToken ? res0 : res1;
-
-      ( res0, res1 )=getPairReserve(_busdWETHPair);
-
-      uint256 busdTotal2=IUniswapV2Pair(_busdWETHPair).token0() == _busdToken ? res0 : res1;
-
-      return busdTotal1.add(busdTotal2);
-    }
-
-    function getWETHTreasure() public view returns(uint256) {
+    function getWETHReserve() public view returns(uint256) {
       (uint256 res0,uint256 res1)=getPairReserve(_busdWETHPair);
 
       uint256 wethTotal1=IUniswapV2Pair(_busdWETHPair).token0() == _wethToken ? res0 : res1;
@@ -572,18 +453,17 @@ function swap(address router, address _tokenIn, address _tokenOut, uint256 _amou
 
     }
 
-    function getHNRUSDTreasure() public view returns(uint256) {
-      (uint256 res0,uint256 res1)=getPairReserve(_honorHNRUSDPair);
+    function getHonorBUSDValue(uint256 amount) public view returns(uint256) {
+      (uint112 res_0,uint112 res_1,)=IUniswapV2Pair(_busdHONORPair).getReserves();
+      (uint256 honorRes,uint256 busdRes) = IUniswapV2Pair(_busdHONORPair).token0()==_honorToken ? (uint256(res_0),uint256(res_1)) : (uint256(res_1),uint256(res_0));
+      return amount.mul(busdRes).div(honorRes);
+    }
 
-      uint256 hnrusdTotal1=IUniswapV2Pair(_honorHNRUSDPair).token0() == _hnrusdToken ? res0 : res1;
-
-      ( res0, res1 )=getPairReserve(_busdHNRUSDPair);
-
-      uint256 hnrusdTotal2=IUniswapV2Pair(_busdHNRUSDPair).token0() == _hnrusdToken ? res0 : res1;
-
-      return hnrusdTotal1.add(hnrusdTotal2);
-    } 
-
+    function getBUSDHonorValue(uint256 amount) public view returns(uint256) {
+      (uint112 res_0,uint112 res_1,)=IUniswapV2Pair(_busdHONORPair).getReserves();
+      (uint256 honorRes,uint256 busdRes) = IUniswapV2Pair(_busdHONORPair).token0()==_honorToken ? (uint256(res_0),uint256(res_1)) : (uint256(res_1),uint256(res_0));
+      return amount.mul(honorRes).div(busdRes);
+    }
    function getAmountOutMin(address router, address _tokenIn, address _tokenOut, uint256 _amount) public view returns (uint256 ) {
     address[] memory path;
     path = new address[](2);

@@ -15,6 +15,8 @@ contract HnrFinanceTokens is Ownable {
     address public _honorToken;
     address public _wethToken;
     
+    uint256 public _awardInterest;
+
     struct TokenFinance 
     {
         uint256 _maxAmountPerUser;
@@ -33,9 +35,16 @@ contract HnrFinanceTokens is Ownable {
         uint amount;       
     }
 
+    struct HonorBalance {
+        uint start_time;
+        uint duration;
+        uint interest_rate;
+        uint256 amount;
+        uint256 busdValue;
+    }
     mapping(address=>TokenFinance) public _tokenFinances;
     mapping(address=>mapping(address=>UserBalance)) public _userBalances;
-
+    mapping(address=>HonorBalance) _userHonorBalances;
 
     constructor(address honorToken,address wethToken,address treasure)
     {
@@ -47,8 +56,8 @@ contract HnrFinanceTokens is Ownable {
     function addToken(address token,uint256 maxAmountUser,uint256 maxTotalAmount,
     uint256 year,uint256 six,uint256 three,uint256 month) public onlyOwner {
         TokenFinance storage finance=_tokenFinances[token];
-        finance._maxAmountPerUser=_maxAmountPerUser;
-        finance._maxTotalAmount=_maxTotalAmount;
+        finance._maxAmountPerUser=maxAmountUser;
+        finance._maxTotalAmount=maxTotalAmount;
         finance._yearInterest=year;
         finance._sixmonthInterest=six;
         finance._threeMonthInterest=three;
@@ -73,9 +82,13 @@ contract HnrFinanceTokens is Ownable {
         finance._monthInterest=month;
     }
 
+    function setAwardInterest(uint256 interest) public onlyOwner {
+        _awardInterest=interest;
+    }
+
     function setMaxCaps(address token,uint256 maxPerUser,uint256 maxAmount) public onlyOwner {
         TokenFinance storage finance=_tokenFinances[token];
-        finance._maxAmountPerUser=_maxAmountPerUser;
+        finance._maxAmountPerUser=maxPerUser;
         finance._maxTotalAmount=maxAmount;
     }
     function getInterestRate(uint duration,address token) public view returns(uint) {
@@ -104,7 +117,7 @@ contract HnrFinanceTokens is Ownable {
 
         require(finance._totalAmount<=finance._maxTotalAmount,"TOTAL AMOUNT ERROR");
 
-        UserBalance storage balance=_userBalance[user][token];
+        UserBalance storage balance=_userBalances[user][token];
 
         require(balance.start_time==0,"Current Deposited");
 
@@ -114,6 +127,37 @@ contract HnrFinanceTokens is Ownable {
         balance.amount=amount;
     }
 
+    function depositHonor(uint256 amount,uint duration) public {
+        IERC20(_honorToken).transferFrom(msg.sender,address(this),amount);
+
+        _depositHonor(msg.sender, amount, duration);
+
+        emit Deposit(msg.sender, _honorToken, amount, duration);
+    }
+    function _depositHonor(address user,uint256 amount,uint duration) private {
+        
+        TokenFinance storage finance=_tokenFinances[_honorToken];
+        require(finance._maxAmountPerUser>=amount && finance._maxAmountPerUser>0,"AMOUNT ERROR");
+
+        uint interest=getInterestRate(duration,_honorToken);
+        require(interest>0,"ERROR DURATION");
+
+        finance._totalAmount += amount;
+
+        require(finance._totalAmount<=finance._maxTotalAmount,"TOTAL AMOUNT ERROR");
+
+        HonorBalance storage balance=_userHonorBalances[user];
+
+        require(balance.start_time==0,"Current Deposited");
+
+        balance.start_time=block.timestamp;
+        balance.interest_rate=interest;
+        balance.duration=duration;
+        balance.amount=amount;
+        balance.busdValue=_honorTreasure.getHonorBUSDValue(amount);
+    }
+
+    
     function depositToken(address token,uint256 amount,uint duration) public {
 
         IERC20(token).transferFrom(msg.sender,address(this),amount);
@@ -122,7 +166,7 @@ contract HnrFinanceTokens is Ownable {
 
         if(token==_wethToken)
         {
-            _honorTreasure.depositWETH(token,amount);
+            _honorTreasure.depositWETH(amount);
         }
         else
         {
@@ -133,7 +177,7 @@ contract HnrFinanceTokens is Ownable {
         emit Deposit(msg.sender,token,amount,duration);
     }
 
-    function depositWETH() public payable {
+    function depositWETH(uint256 duration) public payable {
         uint256 amount=msg.value;
 
         if(amount!=0)
@@ -141,7 +185,7 @@ contract HnrFinanceTokens is Ownable {
             IWETH(_wethToken).deposit{ value: amount }();
         }
 
-        require(IWETH(_wethToken).balanceOf(address(this))>=amount,"Not Deposit WETH");
+        require(IERC20(_wethToken).balanceOf(address(this))>=amount,"Not Deposit WETH");
 
         _depositToken(msg.sender,_wethToken,amount,duration);
 
@@ -188,9 +232,86 @@ contract HnrFinanceTokens is Ownable {
 
     }
 
+    function changeTimeHonor(uint256 addAmount,uint duration) public {
+        HonorBalance storage balance = _userHonorBalances[msg.sender];
+        require(balance.start_time>0,"NOT START");
+
+        uint elapsedTime=block.timestamp - balance.start_time;
+
+        uint remainTime=balance.duration - elapsedTime;
+
+        require(duration>remainTime,"ERROR TIME");
+
+        balance.start_time=0;
+
+        TokenFinance storage finance=_tokenFinances[_honorToken];
+        finance._totalAmount -=balance.amount;
+
+        uint256 income=getIncome(balance.busdValue, elapsedTime, balance.interest_rate);
+
+        uint256 amount=_honorTreasure.getBUSDHonorValue(income + balance.busdValue);
+        if(addAmount>0)
+        {
+            IERC20(_honorToken).transferFrom(msg.sender, address(this), addAmount);
+            amount=amount.add(addAmount);
+
+            _honorTreasure.depositHonor(addAmount);
+        }
+        
+        _depositHonor(msg.sender, amount, duration);
+
+        emit Deposit(msg.sender,_honorToken,addAmount,duration);
+
+    }
+
     function getIncome(uint256 amount,uint256 duration,uint256 rate) public pure returns(uint256) {
         return amount.mul(duration).div(10**18).mul(rate).mul(amount);
     }
 
-     
+    function widthdraw(address token) public {
+        UserBalance storage balance=_userBalances[msg.sender][token];
+        require(balance.start_time>0,"Not Deposited");
+        uint endtime=balance.start_time + balance.duration;
+        require(endtime<=block.timestamp,"Not Time");
+
+        uint256 duration=block.timestamp - balance.start_time;
+
+        uint256 income=getIncome(balance.amount,duration,balance.interest_rate);
+        uint256 lastBalance=balance.amount.add(income);
+        if(_honorTreasure.getTokenReserve(token)>=lastBalance)
+        {
+            _honorTreasure.widthdrawToken(token);
+        }
+        else
+        {
+            uint256 count=getAwardHonorCount(token, lastBalance, income);
+            
+            _honorTreasure.widthdrawHonor(count,msg.sender);
+            //Mint Honor
+        }
+
+        TokenFinance storage finance=_tokenFinances[token];
+        finance._totalAmount=finance._totalAmount.sub(balance.amount);
+        balance.amount=0;
+        balance.duration=0;
+        balance.start_time=0;
+        balance.interest_rate=0;
+        
+        emit Widthdraw(msg.sender,token, lastBalance, duration);
+        
+    }
+
+    function getAwardHonorCount(address token,uint256 amount,uint256 income) public view returns(uint256) {
+        uint256 incomeLast=income.mul(_awardInterest).div(100);
+        uint256 amountLast=amount.sub(income).add(incomeLast);
+        (uint256 tokenRes,uint256 honorRes) = _honorTreasure.getPairAllReserve(token, _honorToken);
+        return amountLast.div(tokenRes).mul(honorRes);
+    }
+
+    function getUserTokenBalance(address user,address token) public view returns(UserBalance memory) {
+        return _userBalances[user][token];
+    }
+    function getUserHonorBalance(address user) public view returns(HonorBalance memory) {
+        return _userHonorBalances[user];
+    }
 }
